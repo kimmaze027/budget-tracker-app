@@ -27,29 +27,29 @@ React Native 기반의 모바일 가계부 애플리케이션입니다.
 ### 필수 요구사항
 
 - Node.js 18 이상
-- pnpm 9.12.0
+- yarn 1.22.19
 - Expo Go 앱 (모바일 테스트용)
 
 ### 설치
 
 ```bash
 # 의존성 설치
-pnpm install
+yarn install
 
 # 개발 서버 시작
-pnpm dev
+yarn dev
 
 # iOS에서 실행
-pnpm ios
+yarn ios
 
 # Android에서 실행
-pnpm android
+yarn android
 ```
 
 ### Expo Go로 테스트
 
 1. 스마트폰에 Expo Go 앱 설치
-2. `pnpm dev` 실행 후 표시되는 QR 코드 스캔
+2. `yarn dev` 실행 후 표시되는 QR 코드 스캔
 3. 앱이 자동으로 로드됩니다
 
 ## 프로젝트 구조
