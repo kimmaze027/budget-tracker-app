@@ -1,60 +1,61 @@
-import { ScrollView, Text, View, TouchableOpacity, ActivityIndicator, FlatList, Alert, Pressable, Platform } from "react-native";
+import { ScrollView, Text, View, ActivityIndicator, Alert, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import { useState, useEffect } from "react";
 import * as Haptics from "expo-haptics";
 
 import { ScreenContainer } from "@/components/screen-container";
-import { useAuth } from "@/hooks/use-auth";
-import { trpc } from "@/lib/trpc";
-import * as WebBrowser from "expo-web-browser";
-import { getLoginUrl } from "@/constants/oauth";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
+import * as Storage from "@/lib/storage";
 
 export default function HomeScreen() {
   const router = useRouter();
   const colors = useColors();
-  const { user, isAuthenticated, loading: authLoading } = useAuth();
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [loading, setLoading] = useState(true);
+  const [currentDate] = useState(new Date());
+  const [summary, setSummary] = useState({ income: 0, expense: 0, balance: 0 });
+  const [transactions, setTransactions] = useState<Storage.Transaction[]>([]);
 
-  // Get current month summary
-  const { data: summary, isLoading: summaryLoading } = trpc.statistics.monthlySummary.useQuery(
-    {
-      year: currentDate.getFullYear(),
-      month: currentDate.getMonth() + 1,
-    },
-    { enabled: isAuthenticated }
-  );
+  useEffect(() => {
+    loadData();
+  }, []);
 
-  // Get recent transactions
-  const { data: transactions, isLoading: transactionsLoading, refetch } = trpc.transactions.list.useQuery(
-    undefined,
-    { enabled: isAuthenticated }
-  );
-
-  const deleteMutation = trpc.transactions.delete.useMutation({
-    onSuccess: () => {
-      refetch();
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    },
-    onError: (error) => {
-      Alert.alert("오류", "거래 삭제에 실패했습니다.");
-    },
-  });
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      
+      // Initialize storage if needed
+      await Storage.initializeStorage();
+      
+      // Load monthly summary
+      const summaryData = await Storage.getMonthlySummary(
+        currentDate.getFullYear(),
+        currentDate.getMonth() + 1
+      );
+      setSummary(summaryData);
+      
+      // Load recent transactions
+      const allTransactions = await Storage.getTransactions();
+      setTransactions(allTransactions.slice(0, 10));
+    } catch (error) {
+      console.error("[Home] Failed to load data:", error);
+      Alert.alert("오류", "데이터를 불러오는데 실패했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleAddTransaction = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // TODO: Implement transaction add screen
-    Alert.alert("안내", "거래 추가 기능은 곧 추가됩니다.");
+    router.push("/transaction/add" as any);
   };
 
-  const handleTransactionPress = (id: number) => {
+  const handleTransactionPress = (id: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    // TODO: Implement transaction detail screen
-    Alert.alert("안내", "거래 상세 기능은 곧 추가됩니다.");
+    router.push(`/transaction/${id}` as any);
   };
 
-  const handleDeleteTransaction = (id: number) => {
+  const handleDeleteTransaction = (id: string) => {
     Alert.alert(
       "거래 삭제",
       "이 거래를 삭제하시겠습니까?",
@@ -63,63 +64,27 @@ export default function HomeScreen() {
         {
           text: "삭제",
           style: "destructive",
-          onPress: () => deleteMutation.mutate({ id }),
+          onPress: async () => {
+            try {
+              await Storage.deleteTransaction(id);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              loadData();
+            } catch (error) {
+              Alert.alert("오류", "거래 삭제에 실패했습니다.");
+            }
+          },
         },
       ]
     );
   };
 
-  if (authLoading) {
+  if (loading) {
     return (
       <ScreenContainer className="items-center justify-center">
         <ActivityIndicator size="large" color={colors.primary} />
       </ScreenContainer>
     );
   }
-
-  const handleLogin = async () => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      const loginUrl = getLoginUrl();
-      
-      if (Platform.OS === "web") {
-        // Web: redirect to OAuth portal
-        window.location.href = loginUrl;
-      } else {
-        // Native: open OAuth portal in browser
-        const result = await WebBrowser.openAuthSessionAsync(loginUrl, null);
-        if (result.type === "success") {
-          // The OAuth callback will handle the redirect
-          console.log("[Login] OAuth session completed");
-        }
-      }
-    } catch (error) {
-      console.error("[Login] Error:", error);
-      Alert.alert("오류", "로그인에 실패했습니다.");
-    }
-  };
-
-  if (!isAuthenticated) {
-    return (
-      <ScreenContainer className="items-center justify-center p-6">
-        <View className="items-center gap-4">
-          <Text className="text-3xl font-bold text-foreground">가계부</Text>
-          <Text className="text-base text-muted text-center">
-            소셜 로그인으로 시작하세요
-          </Text>
-          <Pressable
-            className="bg-primary px-8 py-4 rounded-full mt-4"
-            style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
-            onPress={handleLogin}
-          >
-            <Text className="text-background font-semibold text-lg">로그인</Text>
-          </Pressable>
-        </View>
-      </ScreenContainer>
-    );
-  }
-
-  const recentTransactions = transactions?.slice(0, 10) || [];
 
   return (
     <ScreenContainer className="flex-1">
@@ -131,45 +96,39 @@ export default function HomeScreen() {
               {currentDate.getFullYear()}년 {currentDate.getMonth() + 1}월
             </Text>
             <Text className="text-sm text-muted">
-              안녕하세요, {user?.name || "사용자"}님
+              나의 가계부
             </Text>
           </View>
 
           {/* Summary Card */}
           <View className="bg-surface rounded-2xl p-6 border border-border">
-            {summaryLoading ? (
-              <ActivityIndicator color={colors.primary} />
-            ) : (
-              <View className="gap-4">
-                <View className="flex-row justify-between items-center">
-                  <Text className="text-sm text-muted">수입</Text>
-                  <Text className="text-lg font-semibold" style={{ color: colors.primary }}>
-                    +{summary?.income.toLocaleString() || 0}원
-                  </Text>
-                </View>
-                <View className="flex-row justify-between items-center">
-                  <Text className="text-sm text-muted">지출</Text>
-                  <Text className="text-lg font-semibold" style={{ color: colors.error }}>
-                    -{summary?.expense.toLocaleString() || 0}원
-                  </Text>
-                </View>
-                <View className="h-px bg-border" />
-                <View className="flex-row justify-between items-center">
-                  <Text className="text-base font-semibold text-foreground">잔액</Text>
-                  <Text className="text-xl font-bold text-foreground">
-                    {summary?.balance.toLocaleString() || 0}원
-                  </Text>
-                </View>
+            <View className="gap-4">
+              <View className="flex-row justify-between items-center">
+                <Text className="text-sm text-muted">수입</Text>
+                <Text className="text-lg font-semibold" style={{ color: colors.primary }}>
+                  +{summary.income.toLocaleString()}원
+                </Text>
               </View>
-            )}
+              <View className="flex-row justify-between items-center">
+                <Text className="text-sm text-muted">지출</Text>
+                <Text className="text-lg font-semibold" style={{ color: colors.error }}>
+                  -{summary.expense.toLocaleString()}원
+                </Text>
+              </View>
+              <View className="h-px bg-border" />
+              <View className="flex-row justify-between items-center">
+                <Text className="text-base font-semibold text-foreground">잔액</Text>
+                <Text className="text-xl font-bold text-foreground">
+                  {summary.balance.toLocaleString()}원
+                </Text>
+              </View>
+            </View>
           </View>
 
           {/* Recent Transactions */}
           <View className="gap-4">
             <Text className="text-lg font-semibold text-foreground">최근 거래</Text>
-            {transactionsLoading ? (
-              <ActivityIndicator color={colors.primary} />
-            ) : recentTransactions.length === 0 ? (
+            {transactions.length === 0 ? (
               <View className="bg-surface rounded-2xl p-8 items-center border border-border">
                 <Text className="text-muted text-center">
                   아직 거래 내역이 없습니다.{"\n"}하단의 + 버튼을 눌러 추가해보세요.
@@ -177,7 +136,7 @@ export default function HomeScreen() {
               </View>
             ) : (
               <View className="gap-2">
-                {recentTransactions.map((transaction) => (
+                {transactions.map((transaction) => (
                   <Pressable
                     key={transaction.id}
                     className="bg-surface rounded-xl p-4 border border-border"
@@ -201,7 +160,7 @@ export default function HomeScreen() {
                         }}
                       >
                         {transaction.type === "income" ? "+" : "-"}
-                        {Number(transaction.amount).toLocaleString()}원
+                        {transaction.amount.toLocaleString()}원
                       </Text>
                     </View>
                   </Pressable>
