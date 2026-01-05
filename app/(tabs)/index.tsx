@@ -1,4 +1,4 @@
-import { ScrollView, Text, View, TouchableOpacity, ActivityIndicator, FlatList, Alert, Pressable } from "react-native";
+import { ScrollView, Text, View, TouchableOpacity, ActivityIndicator, FlatList, Alert, Pressable, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import { useState, useEffect } from "react";
 import * as Haptics from "expo-haptics";
@@ -6,6 +6,8 @@ import * as Haptics from "expo-haptics";
 import { ScreenContainer } from "@/components/screen-container";
 import { useAuth } from "@/hooks/use-auth";
 import { trpc } from "@/lib/trpc";
+import * as WebBrowser from "expo-web-browser";
+import { getLoginUrl } from "@/constants/oauth";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
 
@@ -75,6 +77,28 @@ export default function HomeScreen() {
     );
   }
 
+  const handleLogin = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      const loginUrl = getLoginUrl();
+      
+      if (Platform.OS === "web") {
+        // Web: redirect to OAuth portal
+        window.location.href = loginUrl;
+      } else {
+        // Native: open OAuth portal in browser
+        const result = await WebBrowser.openAuthSessionAsync(loginUrl, null);
+        if (result.type === "success") {
+          // The OAuth callback will handle the redirect
+          console.log("[Login] OAuth session completed");
+        }
+      }
+    } catch (error) {
+      console.error("[Login] Error:", error);
+      Alert.alert("오류", "로그인에 실패했습니다.");
+    }
+  };
+
   if (!isAuthenticated) {
     return (
       <ScreenContainer className="items-center justify-center p-6">
@@ -86,7 +110,7 @@ export default function HomeScreen() {
           <Pressable
             className="bg-primary px-8 py-4 rounded-full mt-4"
             style={({ pressed }) => [{ opacity: pressed ? 0.8 : 1 }]}
-            onPress={() => Alert.alert("안내", "로그인 기능은 이미 활성화되어 있습니다. OAuth 콜백을 통해 로그인하세요.")}
+            onPress={handleLogin}
           >
             <Text className="text-background font-semibold text-lg">로그인</Text>
           </Pressable>
