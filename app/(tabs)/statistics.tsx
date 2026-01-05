@@ -1,5 +1,6 @@
 import { ScrollView, Text, View, ActivityIndicator } from "react-native";
-import { useState, useEffect } from "react";
+import { useState, useCallback } from "react";
+import { useFocusEffect } from "@react-navigation/native";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { useColors } from "@/hooks/use-colors";
@@ -12,11 +13,7 @@ export default function StatisticsScreen() {
   const [summary, setSummary] = useState({ income: 0, expense: 0, balance: 0 });
   const [categoryStats, setCategoryStats] = useState<Awaited<ReturnType<typeof Storage.getCategoryStats>>>([]);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -37,7 +34,13 @@ export default function StatisticsScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentDate]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   const incomeStats = categoryStats.filter((stat) => stat.type === "income");
   const expenseStats = categoryStats.filter((stat) => stat.type === "expense");

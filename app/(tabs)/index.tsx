@@ -1,7 +1,8 @@
 import { ScrollView, Text, View, ActivityIndicator, Alert, Pressable } from "react-native";
 import { useRouter } from "expo-router";
-import { useState, useEffect } from "react";
+import { useState, useCallback } from "react";
 import * as Haptics from "expo-haptics";
+import { useFocusEffect } from "@react-navigation/native";
 
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
@@ -16,11 +17,7 @@ export default function HomeScreen() {
   const [summary, setSummary] = useState({ income: 0, expense: 0, balance: 0 });
   const [transactions, setTransactions] = useState<Storage.Transaction[]>([]);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       
@@ -43,7 +40,13 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [currentDate]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   const handleAddTransaction = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
